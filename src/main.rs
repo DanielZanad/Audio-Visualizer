@@ -1,59 +1,36 @@
-use cpal::SampleFormat;
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use audio_listener::audio_listener;
+use rodio::{Decoder, OutputStreamBuilder, Sink, buffer::SamplesBuffer};
+use std::fs::File;
+
+pub mod audio_listener;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let host = cpal::default_host();
+    audio_listener()
+}
 
-    // Manually match the monitor device from `pactl`
-    let device = host.default_output_device().expect("no output device");
+fn extract_samples(path: &str) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
+    let file = File::open(path)?;
+    let decoder: Decoder<File> = Decoder::new_mp3(file)?;
 
-    println!("Using monitor device: {}", device.name()?);
+    let mut samples: Vec<f32> = Vec::new();
 
-    let config = device.default_output_config()?.config();
-    let sample_format = device.default_output_config()?.sample_format();
+    for sample in decoder {
+        samples.push(sample);
+    }
 
-    let err_fn = |err| eprintln!("Stream error: {}", err);
+    Ok(samples)
+}
 
-    let stream = match sample_format {
-        SampleFormat::F32 => device.build_input_stream(
-            &config,
-            move |data: &[f32], _| {
-                println!("Received {:?} samples", data);
-            },
-            err_fn,
-            None,
-        )?,
-        SampleFormat::I16 => device.build_input_stream(
-            &config,
-            move |data: &[i16], _| {
-                println!("Received {} samples", data.len());
-            },
-            err_fn,
-            None,
-        )?,
-        SampleFormat::U16 => device.build_input_stream(
-            &config,
-            move |data: &[u16], _| {
-                println!("Received {} samples", data.len());
-            },
-            err_fn,
-            None,
-        )?,
-        SampleFormat::I8 => todo!(),
-        SampleFormat::I24 => todo!(),
-        SampleFormat::I32 => todo!(),
-        SampleFormat::I64 => todo!(),
-        SampleFormat::U8 => todo!(),
-        SampleFormat::U32 => todo!(),
-        SampleFormat::U64 => todo!(),
-        SampleFormat::F64 => todo!(),
-        _ => todo!(),
-    };
+fn play_samples(samples: Vec<f32>) {
+    let stream_handle =
+        OutputStreamBuilder::open_default_stream().expect("open default audio stream");
+    let sink = Sink::connect_new(&stream_handle.mixer());
 
-    stream.play()?;
+    let channels = 2;
+    let sample_rate = 44100;
 
-    println!("Capturing system audio... Press Ctrl+C to stop.");
-    std::thread::park(); // Keeps the main thread alive
+    let buffer = SamplesBuffer::new(channels, sample_rate, samples);
+    sink.append(buffer);
 
-    Ok(())
+    sink.sleep_until_end();
 }

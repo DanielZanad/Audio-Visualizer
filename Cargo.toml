@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 cpal = "0.16.0"
+rodio = { version = "0.21.0", default-features = true, features = ["symphonia-all"] }
 tokio = { version = "1", features = ["full"] }
